@@ -1,50 +1,55 @@
-#include <ESP8266Wifi.h>
-#include "Adafruit_MQTT.h"
-#include "Adafruit_MQTT_Client.h"
-#include "CTBot.h"
+#include <ESP8266WiFi.h>
+#include <Adafruit_MQTT.h>
+#include <Adafruit_MQTT_Client.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_Sensor.h>
 
-// insert liblary Sensor
-#include "DHT.h"
-#define DHTPIN 4
-#define DHTTYPE DHT22
+#include <Wire.h>
+#include <CTBot.h>
+#include <DHT.h>
 
-DHT dht(DHTPIN, DHTTYPE);
+// Configurasi IO
 
 char str_hum[16];
 char str_temp[16];
 char str_hum1[16];
 char str_temp1[16];
-const int buzzer = 5;
-const int led = 0;
+const int buzzer = 13;
+const int led = 12;
 
-#define WLAN_SSID ".." // ssid
-#define WLAN_PASS ".." // ssid password
-
-#define AIO_SERVER "io.adafruit.com"
-#define AIO_SERVERPORT 1883
-#define AIO_USERNAME ".." // username adafruit account
-#define AIO_KEY ".."      // password adafruit account
-
-String token = ".."; // Telegram Bot token
-
-String msg = "value";
-int id = "..."; // ID telegram
-
-CTBot mybot;
-
+// Configure Network
+#define WLAN_SSID "..." // ssid
+#define WLAN_PASS "..." // password
 WiFiClient client;
 
+// Configure Adafruit IO
+#define AIO_SERVER "io.adafruit.com"
+#define AIO_SERVERPORT 1883
+#define AIO_USERNAME "..." // Adafruit username
+#define AIO_KEY "..."      // Adafruit Key
+
+// configurasi Screen
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+//Configure DHT Sensor
+#define DHTPIN 14
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
+// configurasi Telegram
+String token = "..."; // Token Telegram
+String msg = "Value";
+int id = ...; // ID Telegram
+CTBot myBot;
+
+// Configurasi publish & subcribe
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
-
-Adafruit_MQTT_publish temp = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/temp_cfu");
-Adafruit_MQTT_Publish chiller1 = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/max_cfu");
-Adafruit_MQTT_Subcribe onoffbutton = Adafruit_MQTT_Subcribe(&mqtt, AIO_USERNAME "/feeds/onoff");
-
+Adafruit_MQTT_Publish temp = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/temp_cfu");
+Adafruit_MQTT_Subscribe onoffbutton = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/onoff");
 void MQTT_connect();
-void Buzzer(val)
-{
-  tone(buzzer, val);
-}
 
 void setup()
 {
@@ -52,28 +57,42 @@ void setup()
   delay(10);
   dht.begin();
 
-  punMode(buzzer, OUTPUT);
+  pinMode(buzzer, OUTPUT);
   pinMode(led, OUTPUT);
 
-  Serial.println("Persiapan Loading ... !");
-  Serial.println();
-  Serial.println("Connecting to ");
-  Serial.println(WLAN_SSID);
+  Serial.println(F("Persiapan Koneksi .."));
 
+  // Memulai koneksi ke jaringan
+  Serial.println();
+  Serial.print("Menyambungkan ");
+  Serial.println(WLAN_SSID);
   WiFi.begin(WLAN_SSID, WLAN_PASS);
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
     Serial.print(".");
   }
-  Serial.println();
+  Serial.println("WiFi Connected");
+  Serial.println("IP ADDRESS: ");
+  Serial.println(WiFi.localIP());
+  digitalWrite(led, HIGH);
 
-  Serial.println("Wifi Connected");
-  Serial.println("IP address: ");
-  Serial.print(WiFi.localIP());
+  // SetUp MQTT Subription untuk on off feed
+  mqtt.subscribe(&onoffbutton);
 
-  mqtt.subcribe(&onoffbutton);
+  // bot telegram up
   myBot.setTelegramToken(token);
+
+  // Set Up display
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+  {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;)
+      ;
+  }
+  delay(2000);
+  display.clearDisplay();
+  display.setTextColor(WHITE);
 }
 
 void loop()
@@ -82,81 +101,102 @@ void loop()
   delay(2000);
 
   float h = dht.readHumidity();
-  float t = dht.readtemperature();
-  float f = dht.readTemperature(true);
+  float t = dht.readTemperature();
 
-  if (isnan(h) || isnan(t) || isnan(f))
+  if (isnan(h) || isnan(t))
   {
-    Serial.println("failed to read from DHT Sensor");
+    Serial.println("Gagal membaca sencor");
     return;
   }
+  // clear display
+  display.clearDisplay();
 
-  float hif = dht.computeHeatIndex(f, h);
-  float hic = dht.computeHeatindex(t, h, false);
+  // display temperature
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.print("Temperature: ");
+  display.setTextSize(2);
+  display.setCursor(0, 10);
+  display.print(t);
+  display.print(" ");
+  display.setTextSize(1);
+  display.cp437(true);
+  display.write(167);
+  display.setTextSize(2);
+  display.print("C");
 
-  Serial.print("Temperature : ");
-  Serial.print(t);
-  Serial.print(" *C ");
-  Serial.print("Temperature Chiller 1 in Celcius: ");
-  Serial.println(String(t).c_str());
+  // display humidity
+  display.setTextSize(1);
+  display.setCursor(0, 35);
+  display.print("Humidity: ");
+  display.setTextSize(2);
+  display.setCursor(0, 45);
+  display.print(h);
+  display.print(" %");
 
-  Serial.print(F("\nSending temperature value : "));
+  display.display();
+
+  // publish temperature ke server
+  Serial.print(F("\nMengirim nilai Suhu "));
   Serial.print(String(t).c_str());
   Serial.print("...");
 
   if (!temp.publish(String(t).c_str()))
   {
-    Serial.println(F("Failed"));
+    Serial.print(F("Gagal"));
     delay(200);
   }
   else
   {
     Serial.println(F("OK !"));
-    delay(1000);
+    delay(5000);
   }
 
   if (t > 8)
   {
-    myBot.sendMessage(id, "Peringatan Suhu di atas 8 derajat");
-    Buzzer(2200);
-    Serial.println("Suhu di atas ketentuan");
+    //myBot.sendMessage(id, "Peringatan Suhu saat ini " + String(t) + " derajat");
+    tone(buzzer, 2200);
+    Serial.println(" peringatan Suhu diatas 8 Derajat");
   }
   else if (t < 2)
   {
-    myBot.sendMessage(id, "Peringatan suhu di bawah 2 derajat");
-    Buzzer(2200);
-    Serial.println("Suhu di bawah ketentuan");
+    //myBot.sendMessage(id, "Peringatan Suhu saat ini " + String(t) + " derajat");
+    tone(buzzer, 2200);
+    Serial.println(" peringatan Suhu dibawah 2 Derajat");
   }
   else
   {
-    Serial.println("Suhu Aman");
-    Buzzer(0);
+    Serial.println("Suhu Amana");
+    noTone(buzzer);
   }
   delay(5000);
 }
-
 void MQTT_connect()
 {
   int8_t ret;
+
+  // Stop if already connected.
   if (mqtt.connected())
   {
     return;
   }
-  Serial.print("Conecting to MQTT ..");
+
+  Serial.print("Connecting to MQTT... ");
 
   uint8_t retries = 3;
   while ((ret = mqtt.connect()) != 0)
-  {
+  { // connect will return 0 for connected
     Serial.println(mqtt.connectErrorString(ret));
-    Serial.println("retrying MQTT connection in 5 secconds ..");
+    Serial.println("Retrying MQTT connection in 5 seconds...");
     mqtt.disconnect();
-    delay(5000);
+    delay(5000); // wait 5 seconds
     retries--;
     if (retries == 0)
     {
+      // basically die and wait for WDT to reset me
       while (1)
         ;
     }
   }
-  Serial.println("MQTT Connected !");
+  Serial.println("MQTT Connected!");
 }
