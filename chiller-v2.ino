@@ -154,13 +154,13 @@ void loop()
 
   if (t > 8)
   {
-    //myBot.sendMessage(id, "Peringatan Suhu saat ini " + String(t) + " derajat");
+    myBot.sendMessage(id, "Peringatan Suhu saat ini " + String(t) + " derajat");
     tone(buzzer, 2200);
     Serial.println(" peringatan Suhu diatas 8 Derajat");
   }
   else if (t < 2)
   {
-    //myBot.sendMessage(id, "Peringatan Suhu saat ini " + String(t) + " derajat");
+    myBot.sendMessage(id, "Peringatan Suhu saat ini " + String(t) + " derajat");
     tone(buzzer, 2200);
     Serial.println(" peringatan Suhu dibawah 2 Derajat");
   }
